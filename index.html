@@ -1,13 +1,151 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Harry Potter Character Personality Matcher</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RoadGuardian – Accident Alert</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col">
+
+<header class="bg-gradient-to-r from-emerald-700 to-green-500 shadow-lg">
+  <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+    <h1 class="text-3xl font-bold text-white flex items-center gap-2">🚨 RoadGuardian</h1>
+    <span class="text-gray-200 text-sm">AI Emergency Alert</span>
+  </div>
+</header>
+
+<main class="flex-1 flex flex-col items-center justify-center px-4 py-8 space-y-6">
+  <div class="bg-gray-800 rounded-3xl shadow-2xl w-full max-w-2xl p-8 space-y-6">
+
+    <h2 class="text-center text-2xl font-semibold text-emerald-300">Snap a Photo • Get Help Fast</h2>
+
+    <div class="border-2 border-dashed border-emerald-400 rounded-2xl p-6 text-center relative hover:bg-gray-700 transition">
+      <input id="photo" type="file" accept="image/*" capture="environment" class="hidden" onchange="showPreview()">
+      <label for="photo" class="cursor-pointer block text-emerald-200 hover:text-emerald-400 font-medium">📷 Tap or drag to upload accident photo</label>
+      <p id="file-name" class="mt-2 text-gray-400 text-sm"></p>
+      <img id="preview" class="mt-4 mx-auto rounded-xl max-h-64 hidden shadow-lg"/>
+    </div>
+
+    <input id="desc" type="text" placeholder="Describe the accident (optional)"
+      class="w-full p-3 rounded-xl bg-gray-700 placeholder-gray-400 text-white focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+    <select id="severity" class="w-full p-3 rounded-xl bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-emerald-400">
+      <option value="">Select severity</option>
+      <option value="minor">Minor</option>
+      <option value="moderate">Moderate</option>
+      <option value="severe">Severe</option>
+    </select>
+
+    <button id="send" class="w-full bg-emerald-500 hover:bg-emerald-600 py-3 rounded-2xl transition-all transform hover:scale-105">Analyze & Send Alert</button>
+
+    <div id="status" class="text-center text-sm text-gray-300 mt-2"></div>
+
+    <div id="result" class="bg-gray-900 rounded-xl p-4 text-sm font-mono text-gray-200 whitespace-pre-wrap hidden shadow-inner"></div>
+
+    <audio id="tts" controls class="w-full hidden mt-4 rounded-xl bg-gray-700"></audio>
+
+    <div id="places" class="text-sm mt-4 space-y-2"></div>
+
+    <div class="flex flex-col mt-4">
+      <h3 class="text-emerald-300 font-semibold mb-2">AI Chat Assistant</h3>
+      <textarea id="chatInput" placeholder="Ask AI about accident or first aid..." class="p-2 rounded-xl bg-gray-700 text-white"></textarea>
+      <button id="chatSend" class="mt-2 w-full bg-emerald-500 hover:bg-emerald-600 py-2 rounded-xl">Send</button>
+      <pre id="chatOutput" class="bg-gray-900 p-2 rounded-xl mt-2 max-h-40 overflow-y-auto"></pre>
+    </div>
+
+    <button id="voiceBtn" class="mt-4 w-full bg-green-600 py-2 rounded-xl">🎤 Voice Input</button>
+
+  </div>
+</main>
+
+<footer class="bg-gray-800 text-gray-400 text-center text-xs py-4">© 2025 RoadGuardian</footer>
+
+<script>
+function showPreview(){
+  const f = document.getElementById('photo').files[0];
+  document.getElementById('file-name').innerText = f ? f.name : '';
+  if(f){
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = document.getElementById('preview');
+      img.src = e.target.result;
+      img.classList.remove('hidden');
+    };
+    reader.readAsDataURL(f);
+  }
+}
+
+async function getLocation(){
+  return new Promise((res,rej)=>{
+    navigator.geolocation.getCurrentPosition(p=>res(p.coords), e=>rej(e), {timeout:8000});
+  });
+}
+
+document.getElementById('send').onclick = async ()=>{
+  const f = document.getElementById('photo').files[0];
+  if(!f){ alert('Please choose a photo'); return; }
+  document.getElementById('status').innerText = 'Getting location…';
+  let coords = {latitude:0, longitude:0};
+  try{ coords = await getLocation(); } catch(e){}
+  const fd = new FormData();
+  fd.append('image', f);
+  fd.append('lat', coords.latitude);
+  fd.append('lon', coords.longitude);
+  fd.append('desc', document.getElementById('desc').value);
+  fd.append('severity', document.getElementById('severity').value);
+
+  document.getElementById('status').innerText = 'Analyzing & sending alert…';
+  const res = await fetch('/api/report',{method:'POST',body:fd});
+  const data = await res.json();
+  document.getElementById('result').classList.remove('hidden');
+  document.getElementById('result').innerText = JSON.stringify(data.result, null, 2);
+  document.getElementById('status').innerText = data.smsSent ? '✅ SMS Alert sent!' : '⚠️ SMS failed';
+  if(data.tts_url){
+    const a = document.getElementById('tts');
+    a.src = data.tts_url;
+    a.classList.remove('hidden');
+    a.play().catch(()=>{});
+  }
+
+  // Nearby places
+  const pDiv = document.getElementById('places');
+  pDiv.innerHTML = '';
+  data.places.forEach(pl=>{
+    const d = document.createElement('div');
+    d.innerHTML = `📍 ${pl.type.toUpperCase()}: ${pl.name}, ${pl.address} (<a href="https://maps.google.com/?q=${pl.location.lat},${pl.location.lng}" target="_blank" class="text-emerald-400 underline">Map</a>)`;
+    pDiv.appendChild(d);
+  });
+}
+
+// AI Chatbox
+document.getElementById('chatSend').onclick = async ()=>{
+  const q = document.getElementById('chatInput').value;
+  if(!q) return;
+  const r = await fetch("https://api.openai.com/v1/responses",{
+    method:"POST",
+    headers:{
+      "Authorization":`Bearer ${"YOUR_OPENAI_API_KEY"}`,
+      "Content-Type":"application/json"
+    },
+    body: JSON.stringify({model:"gpt-4o-mini", input:q})
+  });
+  const j = await r.json();
+  const ans = j.output?.[0]?.content?.[0]?.text || j.output_text || "No response";
+  document.getElementById('chatOutput').innerText += "\nUser: "+q+"\nAI: "+ans+"\n";
+}
+
+// Voice input
+const voiceBtn = document.getElementById('voiceBtn');
+voiceBtn.onclick = ()=>{
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = "en-US";
+  recognition.start();
+  recognition.onresult = e=>{
+    const text = e.results[0][0].transcript;
+    document.getElementById('chatInput').value = text;
+    recognition.stop();
+  }
+};
+</script>
+</body>
 </html>
